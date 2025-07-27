@@ -1,14 +1,14 @@
-import openai
+import requests
 from dotenv import load_dotenv
 import os
 import json
 
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not openai.api_key:
-    raise ValueError("API key not found. Make sure it is defined in the .env file.")
+if not GEMINI_API_KEY:
+    raise ValueError("Gemini API key not found. Make sure GEMINI_API_KEY is defined in the .env file.")
 
 
 # Function to extract start and end times
@@ -56,26 +56,48 @@ Any Example
 def GetHighlight(Transcription):
     print("Getting Highlight from Transcription ")
     try:
-
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-2024-05-13",
-            temperature=0.7,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": Transcription + system},
+        # Gemini API endpoint
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        
+        # Prepare the request payload for Gemini
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": f"{system}\n\n{Transcription}"
+                        }
+                    ]
+                }
             ],
-        )
-
-        json_string = response.choices[0].message.content
-        json_string = json_string.replace("json", "")
-        json_string = json_string.replace("```", "")
-        # print(json_string)
-        Start, End = extract_times(json_string)
-        if Start == End:
-            Ask = input("Error - Get Highlights again (y/n) -> ").lower()
-            if Ask == "y":
-                Start, End = GetHighlight(Transcription)
-        return Start, End
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 1000
+            }
+        }
+        
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(url, headers=headers, json=payload)
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            json_string = response_data["candidates"][0]["content"]["parts"][0]["text"]
+            json_string = json_string.replace("json", "")
+            json_string = json_string.replace("```", "")
+            # print(json_string)
+            Start, End = extract_times(json_string)
+            if Start == End:
+                Ask = input("Error - Get Highlights again (y/n) -> ").lower()
+                if Ask == "y":
+                    Start, End = GetHighlight(Transcription)
+            return Start, End
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+            return 0, 0
+            
     except Exception as e:
         print(f"Error in GetHighlight: {e}")
         return 0, 0
